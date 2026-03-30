@@ -1,0 +1,18 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/config.2.0.schema.json",
+  "version": "2.0",
+  "bundles": {
+    "empleo-performance-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/empleoPerformance/EmpleoPerformanceWebPart.js",
+          "manifest": "./src/webparts/empleoPerformance/EmpleoPerformanceWebPart.manifest.json"
+        }
+      ]
+    }
+  },
+  "externals": {},
+  "localizedResources": {
+    "EmpleoPerformanceWebPartStrings": "lib/webparts/empleoPerformance/loc/{locale}.js"
+  }
+}

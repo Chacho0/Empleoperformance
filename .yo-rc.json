@@ -1,0 +1,19 @@
+{
+  "@microsoft/generator-sharepoint": {
+    "useGulp": false,
+    "plusBeta": false,
+    "isCreatingSolution": true,
+    "nodeVersion": "22.22.1",
+    "sdksVersions": {},
+    "version": "1.22.2",
+    "libraryName": "empleo-performance",
+    "libraryId": "277c9c91-04f0-4488-b04d-a012a8f36567",
+    "environment": "spo",
+    "packageManager": "npm",
+    "solutionName": "EmpleoPerformance",
+    "solutionShortDescription": "EmpleoPerformance description",
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "componentType": "webpart"
+  }
+}

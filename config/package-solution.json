@@ -1,0 +1,40 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/package-solution.schema.json",
+  "solution": {
+    "name": "empleo-performance-client-side-solution",
+    "id": "277c9c91-04f0-4488-b04d-a012a8f36567",
+    "version": "1.0.0.0",
+    "includeClientSideAssets": true,
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "developer": {
+      "name": "",
+      "websiteUrl": "",
+      "privacyUrl": "",
+      "termsOfUseUrl": "",
+      "mpnId": "Undefined-1.22.2"
+    },
+    "metadata": {
+      "shortDescription": {
+        "default": "EmpleoPerformance description"
+      },
+      "longDescription": {
+        "default": "EmpleoPerformance description"
+      },
+      "screenshotPaths": [],
+      "videoUrl": "",
+      "categories": []
+    },
+    "features": [
+      {
+        "title": "empleo-performance Feature",
+        "description": "The feature that activates elements of the empleo-performance solution.",
+        "id": "896aa8e6-a268-4ec1-8624-609f37f0d83b",
+        "version": "1.0.0.0"
+      }
+    ]
+  },
+  "paths": {
+    "zippedPackage": "solution/empleo-performance.sppkg"
+  }
+}
