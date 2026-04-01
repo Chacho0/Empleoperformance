@@ -607,6 +607,101 @@
   padding: 16px;
 }
 
+.modalLarge {
+  width: min(1000px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #e8eef6;
+  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.25);
+  padding: 16px;
+}
+
+.tabBar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #e8eef6;
+  margin-bottom: 16px;
+}
+
+.tabBtn {
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #64748b;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.2s;
+}
+
+.tabBtn:hover {
+  color: #0f172a;
+  background: #f4f7fb;
+}
+
+.tabActive {
+  color: #0f6cbd;
+  border-bottom-color: #0f6cbd;
+}
+
+.tabContent {
+  min-height: 300px;
+}
+
+.detailSection {
+  padding: 8px 0;
+}
+
+.emptyState {
+  text-align: center;
+  padding: 40px 20px;
+  color: #64748b;
+}
+
+.listItems {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.listItem {
+  padding: 12px;
+  border: 1px solid #e8eef6;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.listItem:hover {
+  border-color: #0f6cbd;
+  background: #f4f7fb;
+}
+
+.listItemMain {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.listItemTitle {
+  font-weight: 500;
+  color: #0f172a;
+}
+
+.listItemMeta {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #64748b;
+}
+
 .modalHeader {
   display: flex;
   justify-content: space-between;

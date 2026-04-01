@@ -51,6 +51,7 @@ export interface IEmployeeDashboardState {
   showObjectiveModal: boolean;
   showTaskModal: boolean;
   showEmployeeModal: boolean;
+  showEmployeeDetailModal: boolean;
   showCycleModal: boolean;
   showCycleListModal: boolean;
   showDeliverableDetailModal: boolean;
@@ -63,6 +64,7 @@ export interface IEmployeeDashboardState {
   isDesignMode: boolean;
   designModeRole: 'employee' | 'manager' | 'director';
   activeTab: 'team' | 'deliverables' | 'objectives' | 'tasks';
+  activeDetailTab: 'overview' | 'objectives' | 'tasks';
   isSaving: boolean;
   isManagerOfDeliverables: boolean;
 }
@@ -405,6 +407,7 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
       showObjectiveModal: false,
       showTaskModal: false,
       showEmployeeModal: false,
+      showEmployeeDetailModal: false,
       showCycleModal: false,
       showCycleListModal: false,
       showDeliverableDetailModal: false,
@@ -417,6 +420,7 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
       isDesignMode: false,
       designModeRole: 'employee',
       activeTab: 'team',
+      activeDetailTab: 'overview',
       isSaving: false,
       isManagerOfDeliverables: false
     };
@@ -498,33 +502,23 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
       allDepartments = await this.organizationService.getAllDepartments();
       
       if (this.performanceService) {
-        const primaryDeptId = orgContext.primaryDepartmentRelation?.department.Id;
         const currentEmployeeId = orgContext.currentEmployee.Id;
-        const isDeptManagerContext = orgContext.isDepartmentManager;
+        const isProjectLeaderContext = orgContext.currentEmployee.AppRole === 'ProjectLeader';
         
-        console.log('Loading data - primaryDeptId:', primaryDeptId, 'employeeId:', currentEmployeeId, 'AppRole:', orgContext.currentEmployee.AppRole, 'isDeptManager:', isDeptManagerContext, 'managedDepts:', managedDeptIds);
+        console.log('Loading data - employeeId:', currentEmployeeId, 'AppRole:', orgContext.currentEmployee.AppRole, 'isProjectLeader:', isProjectLeaderContext, 'managedDepts:', managedDeptIds);
         
-        if (currentEmployeeId) {
-          const mgrDeliverables = await this.performanceService.getDeliverablesByManager(currentEmployeeId);
-          console.log('Deliverables by manager:', mgrDeliverables.length);
-          isManagerOfDeliverables = mgrDeliverables.length > 0;
+        if (isProjectLeaderContext) {
+          deliverables = await this.performanceService.getAllDeliverables();
+          objectives = await this.performanceService.getAllObjectives();
+          tasks = await this.performanceService.getAllTasks();
           
-          if (isManagerOfDeliverables) {
-            deliverables = mgrDeliverables;
-            const deptIdSet = new Set<number>();
-            mgrDeliverables.forEach(d => deptIdSet.add(d.AssignedDepartmentId));
-            deliverablesDeptIds = Array.from(deptIdSet);
-          }
-        }
-        
-        if (primaryDeptId) {
-          const deptDeliverables = await this.performanceService.getDeliverablesByDepartment(primaryDeptId);
-          console.log('Deliverables by department:', deptDeliverables.length);
-          deliverables = [...deliverables, ...deptDeliverables];
-          deliverablesDeptIds.push(primaryDeptId);
-          objectives = await this.performanceService.getObjectivesByDepartment(primaryDeptId);
-          tasks = await this.performanceService.getTasksByDepartment(primaryDeptId);
-        } else if (isDeptManagerContext && managedDeptIds.length > 0) {
+          const deptIdSet = new Set<number>();
+          deliverables.forEach(d => { if (d.AssignedDepartmentId) deptIdSet.add(d.AssignedDepartmentId); });
+          objectives.forEach(o => { if (o.AssignedDepartmentId) deptIdSet.add(o.AssignedDepartmentId); });
+          tasks.forEach(t => { if (t.AssignedDepartmentId) deptIdSet.add(t.AssignedDepartmentId); });
+          deliverablesDeptIds = Array.from(deptIdSet);
+          isManagerOfDeliverables = true;
+        } else if (managedDeptIds.length > 0) {
           for (const deptId of managedDeptIds) {
             const deptDeliverables = await this.performanceService.getDeliverablesByDepartment(deptId);
             const deptObjectives = await this.performanceService.getObjectivesByDepartment(deptId);
@@ -534,30 +528,18 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
             objectives = [...objectives, ...deptObjectives];
             tasks = [...tasks, ...deptTasks];
           }
+          isManagerOfDeliverables = deliverables.length > 0;
         }
         
-        if (currentEmployeeId) {
-          const empDeliverables = await this.performanceService.getDeliverablesByEmployee(currentEmployeeId);
-          console.log('Deliverables by employee:', empDeliverables.length);
-          const empObjectives = await this.performanceService.getObjectivesByEmployee(currentEmployeeId);
-          const empTasks = await this.performanceService.getTasksByEmployee(currentEmployeeId);
-          
-          const allDeliverables = [...deliverables, ...empDeliverables];
-          const delMap = new Map<number, IDeliverable>();
-          allDeliverables.forEach(d => delMap.set(d.Id, d));
-          deliverables = Array.from(delMap.values());
-          console.log('Total deliverables:', deliverables.length);
-          
-          const allObjectives = [...objectives, ...empObjectives];
-          const objMap = new Map<number, IObjective>();
-          allObjectives.forEach(o => objMap.set(o.Id, o));
-          objectives = Array.from(objMap.values());
-          
-          const allTasks = [...tasks, ...empTasks];
-          const taskMap = new Map<number, ITask>();
-          allTasks.forEach(t => taskMap.set(t.Id, t));
-          tasks = Array.from(taskMap.values());
-        }
+        const empDeliverables = await this.performanceService.getDeliverablesByEmployee(currentEmployeeId);
+        const empObjectives = await this.performanceService.getObjectivesByEmployee(currentEmployeeId);
+        const empTasks = await this.performanceService.getTasksByEmployee(currentEmployeeId);
+        
+        console.log('Personal deliverables:', empDeliverables.length, 'objectives:', empObjectives.length, 'tasks:', empTasks.length);
+        
+        deliverables = [...deliverables, ...empDeliverables];
+        objectives = [...objectives, ...empObjectives];
+        tasks = [...tasks, ...empTasks];
         
         const uniqueDeptIds: number[] = [];
         deliverablesDeptIds.forEach((id: number) => { if (id > 0 && uniqueDeptIds.indexOf(id) === -1) uniqueDeptIds.push(id); });
@@ -565,24 +547,24 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
         if (uniqueDeptIds.length > 0) {
           const allEmps = await this.organizationService.getAllEmployees();
           deptEmployeeRelations = await this.organizationService.getDepartmentEmployeesByDepartments(uniqueDeptIds);
-          const empIds: number[] = deptEmployeeRelations.map((de: IEmployeeDepartment) => de.EmployeeId);
-          const uniqueEmpIds: number[] = [];
-          empIds.forEach((id: number) => { if (uniqueEmpIds.indexOf(id) === -1) uniqueEmpIds.push(id); });
-          departmentEmployees = allEmps.filter(emp => uniqueEmpIds.indexOf(emp.Id) >= 0);
-          
-          const deptObjectives = await this.performanceService.getObjectivesByDepartments(uniqueDeptIds);
-          const deptTasks = await this.performanceService.getTasksByDepartments(uniqueDeptIds);
-          
-          const allObjectives = [...objectives, ...deptObjectives];
-          const objMap = new Map<number, IObjective>();
-          allObjectives.forEach(o => objMap.set(o.Id, o));
-          objectives = Array.from(objMap.values());
-          
-          const allTasks = [...tasks, ...deptTasks];
-          const taskMap = new Map<number, ITask>();
-          allTasks.forEach(t => taskMap.set(t.Id, t));
-          tasks = Array.from(taskMap.values());
+          const empIds: number[] = [];
+          deptEmployeeRelations.forEach((de: IEmployeeDepartment) => { if (empIds.indexOf(de.EmployeeId) === -1) empIds.push(de.EmployeeId); });
+          departmentEmployees = allEmps.filter(emp => empIds.indexOf(emp.Id) >= 0);
         }
+        
+        const delMap = new Map<number, IDeliverable>();
+        deliverables.forEach(d => delMap.set(d.Id, d));
+        deliverables = Array.from(delMap.values());
+        
+        const objMap = new Map<number, IObjective>();
+        objectives.forEach(o => objMap.set(o.Id, o));
+        objectives = Array.from(objMap.values());
+        
+        const taskMap = new Map<number, ITask>();
+        tasks.forEach(t => taskMap.set(t.Id, t));
+        tasks = Array.from(taskMap.values());
+        
+        console.log('Total loaded - deliverables:', deliverables.length, 'objectives:', objectives.length, 'tasks:', tasks.length);
       }
 
       this.setState({
@@ -752,6 +734,66 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
     });
   }
 
+  private get teamMembers(): ISubordinateInfo[] {
+    const { subordinates, deptEmployeeRelations, departmentEmployees, allDepartments, context, searchText, selectedDepartment } = this.state;
+    
+    if (!context) return [];
+    
+    const userDepts = this.managedDepartments;
+    const deptsToFilter = this.hasSelectedDepartments 
+      ? this.state.selectedDepartments.filter(id => userDepts.indexOf(id) >= 0)
+      : userDepts;
+    
+    const result: ISubordinateInfo[] = [];
+    const addedIds = new Set<number>();
+    
+    subordinates.forEach(sub => {
+      if (!addedIds.has(sub.employee.Id)) {
+        const matchesSearch = searchText === '' || 
+          sub.employee.Title.toLowerCase().includes(searchText.toLowerCase()) ||
+          sub.employee.PositionTitle.toLowerCase().includes(searchText.toLowerCase());
+        
+        const matchesDept = selectedDepartment === 'all' || 
+          sub.departmentRelation?.department?.Id?.toString() === selectedDepartment;
+        
+        if (matchesSearch && matchesDept) {
+          result.push(sub);
+          addedIds.add(sub.employee.Id);
+        }
+      }
+    });
+    
+    deptEmployeeRelations.forEach(rel => {
+      if (addedIds.has(rel.EmployeeId)) return;
+      if (deptsToFilter.indexOf(rel.DepartmentId) < 0) return;
+      
+      const employee = departmentEmployees.find(emp => emp.Id === rel.EmployeeId);
+      const department = allDepartments.find(dept => dept.Id === rel.DepartmentId);
+      
+      if (!employee) return;
+      
+      const matchesSearch = searchText === '' || 
+        employee.Title.toLowerCase().includes(searchText.toLowerCase()) ||
+        employee.PositionTitle.toLowerCase().includes(searchText.toLowerCase());
+      
+      if (matchesSearch) {
+        result.push({
+          employee,
+          departmentRelation: {
+            employeeDepartment: rel,
+            employee,
+            department: department!,
+            reportsToEmployee: null
+          },
+          subordinatesCount: 0
+        });
+        addedIds.add(rel.EmployeeId);
+      }
+    });
+    
+    return result;
+  }
+
   private get departmentManagers(): { employee: IEmployee; department: IDepartment; deptRelation: IEmployeeDepartment }[] {
     const { deptEmployeeRelations, departmentEmployees, allDepartments } = this.state;
     
@@ -771,11 +813,22 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
   }
 
   private get totalKPI(): { objectives: number; tasks: number; completed: number; pending: number } {
+    const objectives = this.filteredObjectives;
+    const tasks = this.filteredTasks;
+    
+    const completedObjectives = objectives.filter(o => o.Status === 'Completed').length;
+    const completedTasks = tasks.filter(t => t.Status === 'Completed').length;
+    const completed = completedObjectives + completedTasks;
+    
+    const pendingObjectives = objectives.filter(o => o.Status === 'In Progress' || o.Status === 'Pending').length;
+    const pendingTasks = tasks.filter(t => t.Status === 'In Progress' || t.Status === 'Pending').length;
+    const pending = pendingObjectives + pendingTasks;
+    
     return {
-      objectives: this.state.subordinates.length + 3,
-      tasks: this.state.subordinates.length * 2 + 8,
-      completed: Math.floor((this.state.subordinates.length * 2 + 8) * 0.65),
-      pending: Math.floor((this.state.subordinates.length * 2 + 8) * 0.35)
+      objectives: objectives.length,
+      tasks: tasks.length,
+      completed,
+      pending
     };
   }
 
@@ -811,6 +864,24 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
     return this.state.selectedDepartments.length > 0;
   }
 
+  private get managedDepartments(): number[] {
+    const { context } = this.state;
+    if (!context) return [];
+    return context.departmentRelations
+      .filter(rel => rel.employeeDepartment.RoleInDepartment === 'DepartmentManager')
+      .map(rel => rel.department.Id);
+  }
+
+  private get userDepartments(): number[] {
+    const { context } = this.state;
+    if (!context) return [];
+    return context.departmentRelations.map(rel => rel.department.Id);
+  }
+
+  private get isManagerInSelectedDepartments(): boolean {
+    return this.state.selectedDepartments.some(deptId => this.managedDepartments.indexOf(deptId) >= 0);
+  }
+
   private canAssignObjectivesInDepartment(departmentId: number): boolean {
     const { context } = this.state;
     if (!context) return false;
@@ -838,33 +909,17 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
   private get canCreateObjective(): boolean {
     if (this.isProjectLeader) return true;
     if (!this.hasSelectedDepartments) {
-      return this.canCreateObjectiveInAnyDepartment();
+      return this.managedDepartments.length > 0;
     }
-    return this.state.selectedDepartments.some(deptId => this.canAssignObjectivesInDepartment(deptId));
+    return this.isManagerInSelectedDepartments;
   }
 
   private get canCreateTask(): boolean {
     if (this.isProjectLeader) return true;
     if (!this.hasSelectedDepartments) {
-      return this.canCreateTaskInAnyDepartment();
+      return this.managedDepartments.length > 0;
     }
-    return this.state.selectedDepartments.some(deptId => this.canAssignTasksInDepartment(deptId));
-  }
-
-  private canCreateObjectiveInAnyDepartment(): boolean {
-    const relations = this.state.context?.departmentRelations ?? [];
-    const isDeptManager = relations.some(rel => rel?.employeeDepartment?.RoleInDepartment === 'DepartmentManager');
-    if (isDeptManager) return true;
-    if (this.state.isManagerOfDeliverables) return true;
-    return relations.some(rel => rel?.employeeDepartment?.CanAssignObjectives === true);
-  }
-
-  private canCreateTaskInAnyDepartment(): boolean {
-    const relations = this.state.context?.departmentRelations ?? [];
-    const isDeptManager = relations.some(rel => rel?.employeeDepartment?.RoleInDepartment === 'DepartmentManager');
-    if (isDeptManager) return true;
-    if (this.state.isManagerOfDeliverables) return true;
-    return relations.some(rel => rel?.employeeDepartment?.CanAssignTasks === true);
+    return this.isManagerInSelectedDepartments;
   }
 
   private get canCreateDeliverable(): boolean {
@@ -872,31 +927,125 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
   }
 
   private get filteredDeliverables(): IDeliverable[] {
-    const { deliverables } = this.state;
-    if (!this.hasSelectedDepartments) return deliverables;
-    return deliverables.filter(d => this.state.selectedDepartments.indexOf(d.AssignedDepartmentId) >= 0);
+    const { deliverables, context } = this.state;
+    if (!context) return [];
+    
+    if (this.isProjectLeader) {
+      return this.hasSelectedDepartments 
+        ? deliverables.filter(d => this.state.selectedDepartments.indexOf(d.AssignedDepartmentId) >= 0)
+        : deliverables;
+    }
+    
+    const userDepts = this.managedDepartments;
+    if (userDepts.length === 0) return [];
+    
+    const deptsToFilter = this.hasSelectedDepartments 
+      ? this.state.selectedDepartments.filter(id => userDepts.indexOf(id) >= 0)
+      : userDepts;
+    
+    return deliverables.filter(d => deptsToFilter.indexOf(d.AssignedDepartmentId) >= 0);
   }
 
   private get filteredObjectives(): IObjective[] {
-    const { objectives } = this.state;
-    if (!this.hasSelectedDepartments) return objectives;
-    return objectives.filter(o => !o.AssignedDepartmentId || this.state.selectedDepartments.indexOf(o.AssignedDepartmentId) >= 0);
+    const { objectives, context } = this.state;
+    if (!context) return [];
+    
+    if (this.isProjectLeader) {
+      return this.hasSelectedDepartments 
+        ? objectives.filter(o => !o.AssignedDepartmentId || this.state.selectedDepartments.indexOf(o.AssignedDepartmentId) >= 0)
+        : objectives;
+    }
+    
+    const userDepts = this.managedDepartments;
+    const userId = context.currentEmployee.Id;
+    
+    if (userDepts.length === 0) {
+      return objectives.filter(o => o.AssignedEmployeeId === userId);
+    }
+    
+    const deptsToFilter = this.hasSelectedDepartments 
+      ? this.state.selectedDepartments.filter(id => userDepts.indexOf(id) >= 0)
+      : userDepts;
+    
+    return objectives.filter(o => 
+      o.AssignedEmployeeId === userId || 
+      (o.AssignedDepartmentId && deptsToFilter.indexOf(o.AssignedDepartmentId) >= 0)
+    );
   }
 
   private get filteredTasks(): ITask[] {
-    const { tasks } = this.state;
-    if (!this.hasSelectedDepartments) return tasks;
-    return tasks.filter(t => !t.AssignedDepartmentId || this.state.selectedDepartments.indexOf(t.AssignedDepartmentId) >= 0);
+    const { tasks, context } = this.state;
+    if (!context) return [];
+    
+    if (this.isProjectLeader) {
+      return this.hasSelectedDepartments 
+        ? tasks.filter(t => !t.AssignedDepartmentId || this.state.selectedDepartments.indexOf(t.AssignedDepartmentId) >= 0)
+        : tasks;
+    }
+    
+    const userDepts = this.managedDepartments;
+    const userId = context.currentEmployee.Id;
+    
+    if (userDepts.length === 0) {
+      return tasks.filter(t => t.AssignedEmployeeId === userId);
+    }
+    
+    const deptsToFilter = this.hasSelectedDepartments 
+      ? this.state.selectedDepartments.filter(id => userDepts.indexOf(id) >= 0)
+      : userDepts;
+    
+    return tasks.filter(t => 
+      t.AssignedEmployeeId === userId || 
+      (t.AssignedDepartmentId && deptsToFilter.indexOf(t.AssignedDepartmentId) >= 0)
+    );
   }
 
   private get filteredDepartmentEmployees(): IEmployee[] {
     const { departmentEmployees, context } = this.state;
-    if (!context) return departmentEmployees;
-    if (!this.hasSelectedDepartments) return departmentEmployees;
-    const deptRelations = context.departmentRelations.filter(rel => this.state.selectedDepartments.indexOf(rel.department.Id) >= 0);
-    const empIds = new Set<number>();
-    deptRelations.forEach(rel => empIds.add(rel.employee.Id));
-    return departmentEmployees.filter(emp => empIds.has(emp.Id));
+    if (!context) return [];
+    
+    if (this.isProjectLeader) {
+      return this.hasSelectedDepartments 
+        ? departmentEmployees.filter(emp => {
+            const rel = context.departmentRelations.find(r => r.employee.Id === emp.Id);
+            return rel && this.state.selectedDepartments.indexOf(rel.department.Id) >= 0;
+          })
+        : departmentEmployees;
+    }
+    
+    const userDepts = this.managedDepartments;
+    if (userDepts.length === 0) return [];
+    
+    const deptsToFilter = this.hasSelectedDepartments 
+      ? this.state.selectedDepartments.filter(id => userDepts.indexOf(id) >= 0)
+      : userDepts;
+    
+    return departmentEmployees.filter(emp => {
+      const rel = context.departmentRelations.find(r => r.employee.Id === emp.Id);
+      return rel && deptsToFilter.indexOf(rel.department.Id) >= 0;
+    });
+  }
+
+  private get allDepartmentMembers(): IEmployee[] {
+    const { departmentEmployees, deptEmployeeRelations } = this.state;
+    
+    const userDepts = this.managedDepartments;
+    const deptsToFilter = this.hasSelectedDepartments 
+      ? this.state.selectedDepartments.filter(id => userDepts.indexOf(id) >= 0)
+      : userDepts;
+    
+    const empIdsInDepts = new Set<number>();
+    deptEmployeeRelations.forEach(rel => {
+      if (deptsToFilter.indexOf(rel.DepartmentId) >= 0) {
+        empIdsInDepts.add(rel.EmployeeId);
+      }
+    });
+    
+    return departmentEmployees.filter(emp => empIdsInDepts.has(emp.Id));
+  }
+
+  private get departmentMembersCount(): number {
+    return this.allDepartmentMembers.length;
   }
 
   private get isManagerView(): boolean {
@@ -924,8 +1073,31 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
       this.setState({ showTaskModal: false });
     }
   };
+  private handleTaskDeliverableChange = (): void => {
+    const deliverableIdStr = (document.getElementById('taskDeliverable') as HTMLSelectElement).value;
+    const objectiveSelect = document.getElementById('taskObjective') as HTMLSelectElement;
+    const objectives = this.state.objectives;
+    
+    if (!objectiveSelect) return;
+    
+    objectiveSelect.innerHTML = '<option value="">-- None --</option>';
+    
+    if (deliverableIdStr) {
+      const deliverableId = parseInt(deliverableIdStr);
+      const filteredObjectives = objectives.filter(o => o.DeliverableId === deliverableId);
+      filteredObjectives.forEach(obj => {
+        const option = document.createElement('option');
+        option.value = obj.Id.toString();
+        option.textContent = obj.Title;
+        objectiveSelect.appendChild(option);
+      });
+    }
+  };
   private openEmployeeModal = (emp: ISubordinateInfo): void => this.setState({ showEmployeeModal: true, selectedEmployee: emp });
   private closeEmployeeModal = (): void => this.setState({ showEmployeeModal: false, selectedEmployee: null });
+  private openEmployeeDetailModal = (): void => this.setState({ showEmployeeDetailModal: true, activeDetailTab: 'overview' });
+  private closeEmployeeDetailModal = (): void => this.setState({ showEmployeeDetailModal: false });
+  private setEmployeeDetailTab = (tab: 'overview' | 'objectives' | 'tasks'): void => this.setState({ activeDetailTab: tab });
   private openCycleModal = (cycle?: IEvaluationCycle): void => this.setState({ showCycleModal: true, selectedCycle: cycle || null });
   private closeCycleModal = (): void => {
     if (confirm('Are you sure you want to close? Any unsaved changes will be lost.')) {
@@ -1038,12 +1210,10 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
 
   public renderToolbar(): React.ReactElement {
     const { searchText, selectedDepartment, selectedDepartments, context, allDepartments } = this.state;
-    const departments = context?.departmentRelations || [];
-    const uniqueDepts = departments.filter((v, i, a) => a.findIndex(t => t.department.Id === v.department.Id) === i);
     
     const availableDepts = this.isProjectLeader
       ? allDepartments
-      : uniqueDepts.map(rel => rel.department);
+      : allDepartments.filter(d => this.userDepartments.indexOf(d.Id) >= 0);
 
     const handleDepartmentToggle = (deptId: number): void => {
       const currentDepts = this.state.selectedDepartments;
@@ -1127,7 +1297,7 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
       <div className="kpiGrid">
         {userRole !== 'normal' && (
           <div className="kpiCard">
-            <div className="kpiValue">{this.state.subordinates.length}</div>
+            <div className="kpiValue">{this.departmentMembersCount}</div>
             <div className="kpiLabel">Members</div>
           </div>
         )}
@@ -1236,15 +1406,15 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
 
   public renderManagerView(): React.ReactElement {
     const { context, userRole } = this.state;
-    const filteredSubs = this.filteredSubordinates;
+    const teamMembers = this.teamMembers;
 
     return (
       <div className="mainGrid">
         <div className="tablePanel">
           <div className="panel">
             <div className="panelHeader">
-              <h3>My Team ({filteredSubs.length})</h3>
-              {context?.permissions.canViewReports && (
+              <h3>My Team ({teamMembers.length})</h3>
+              {(context?.permissions.canViewReports || this.managedDepartments.length > 0) && (
                 <span className="muted">With report permissions</span>
               )}
             </div>
@@ -1255,18 +1425,20 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
                     <th>Name</th>
                     <th>Position</th>
                     <th>Role</th>
+                    <th style={{ textAlign: 'center' }}>Objectives</th>
+                    <th style={{ textAlign: 'center' }}>Tasks</th>
                     <th>Progress</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSubs.length === 0 ? (
+                  {teamMembers.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="emptyCell">No team members found</td>
+                      <td colSpan={8} className="emptyCell">No team members found</td>
                     </tr>
                   ) : (
-                    filteredSubs.map((sub, index) => this.renderTeamRow(sub, index))
+                    teamMembers.map((sub, index) => this.renderTeamRow(sub, index))
                   )}
                 </tbody>
               </table>
@@ -1343,17 +1515,31 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
   }
 
   private renderTeamRow(sub: ISubordinateInfo, index: number): React.ReactElement {
-    const progress = 50 + (index * 8) % 45;
-    const statusClass = progress >= 80 ? 'badgeOk' : progress >= 50 ? 'badgeWarn' : 'badgeNeutral';
-    const statusText = progress >= 80 ? 'Excellent' : progress >= 50 ? 'In Progress' : 'Not Started';
+    const { objectives, tasks, deliverables } = this.state;
+    
+    const memberObjectives = objectives.filter(o => o.AssignedEmployeeId === sub.employee.Id);
+    const memberTasks = tasks.filter(t => t.AssignedEmployeeId === sub.employee.Id);
+    
+    const completedObj = memberObjectives.filter(o => o.Status === 'Completed').length;
+    const completedTasks = memberTasks.filter(t => t.Status === 'Completed').length;
+    
+    const totalItems = memberObjectives.length + memberTasks.length;
+    const completedItems = completedObj + completedTasks;
+    
+    const progress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+    
+    const statusClass = progress >= 70 ? 'badgeOk' : progress >= 40 ? 'badgeWarn' : 'badgeNeutral';
+    const statusText = progress >= 70 ? 'On Track' : progress >= 40 ? 'In Progress' : 'Needs Attention';
 
     return (
       <tr key={`${sub.employee.Id}-${index}`} className="rowClick" onClick={() => this.openEmployeeModal(sub)}>
         <td className="titleCell">
           <span className="titleMain">{sub.employee.Title}</span>
         </td>
-        <td>{sub.employee.PositionTitle}</td>
-        <td>{sub.departmentRelation.employeeDepartment.RoleInDepartment}</td>
+        <td>{sub.employee.PositionTitle || 'N/A'}</td>
+        <td>{sub.departmentRelation?.employeeDepartment?.RoleInDepartment || 'Member'}</td>
+        <td style={{ textAlign: 'center' }}>{completedObj}/{memberObjectives.length}</td>
+        <td style={{ textAlign: 'center' }}>{completedTasks}/{memberTasks.length}</td>
         <td>
           <div className="progressRow">
             <div className="progressTrack">
@@ -1367,7 +1553,7 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
         </td>
         <td>
           <div className="actionBtns">
-            <button className="iconBtnEdit" title="View details">👁</button>
+            <button className="iconBtnEdit" title="View details" onClick={(e) => { e.stopPropagation(); this.openEmployeeModal(sub); }}>👁</button>
           </div>
         </td>
       </tr>
@@ -1463,54 +1649,51 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
   }
 
   private renderProgressPanel(): React.ReactElement | null {
-    const { subordinates, departmentEmployees, objectives, tasks } = this.state;
+    const { objectives, tasks } = this.state;
+    const deptEmployees = this.allDepartmentMembers;
     
-    const membersToShow = subordinates.length > 0 ? subordinates : 
-      departmentEmployees.map(emp => ({
-        employee: emp,
-        subordinatesCount: 0,
-        departmentRelation: null as any
-      }));
-
-    if (membersToShow.length === 0) return null;
+    if (deptEmployees.length === 0) return null;
 
     const getMemberProgress = (employeeId: number): number => {
       const memberObjectives = objectives.filter(o => o.AssignedEmployeeId === employeeId);
       const memberTasks = tasks.filter(t => t.AssignedEmployeeId === employeeId);
       
-      if (memberObjectives.length === 0 && memberTasks.length === 0) {
-        return Math.floor(Math.random() * 40) + 30;
-      }
+      const totalItems = memberObjectives.length + memberTasks.length;
+      if (totalItems === 0) return 0;
       
       const completedObj = memberObjectives.filter(o => o.Status === 'Completed').length;
-      const totalObj = memberObjectives.length;
       const completedTasks = memberTasks.filter(t => t.Status === 'Completed').length;
-      const totalTasks = memberTasks.length;
-      
-      if (totalObj + totalTasks === 0) return 50;
-      
-      const totalItems = totalObj + totalTasks;
       const completedItems = completedObj + completedTasks;
+      
       return Math.round((completedItems / totalItems) * 100);
     };
+
+    const sortedMembers = deptEmployees
+      .map(emp => ({
+        id: emp.Id,
+        name: emp.Title,
+        progress: getMemberProgress(emp.Id)
+      }))
+      .sort((a, b) => b.progress - a.progress);
+
+    if (sortedMembers.length === 0) return null;
 
     return (
       <div className="panel">
         <div className="panelHeader">
-          <h3>Team Progress</h3>
+          <h3>Team Progress ({sortedMembers.length})</h3>
         </div>
         <div className="miniBars">
-          {membersToShow.slice(0, 5).map((member: any, index: number) => {
-            const progress = getMemberProgress(member.employee.Id);
-            const name = member.employee.Title.split(' ')[0];
+          {sortedMembers.map((member) => {
+            const name = member.name.split(' ')[0];
             return (
-              <div key={member.employee.Id} className="miniBarItem">
+              <div key={member.id} className="miniBarItem">
                 <div className="miniBarLabel">
                   <span>{name}</span>
-                  <b>{progress}%</b>
+                  <b>{member.progress}%</b>
                 </div>
                 <div className="miniBarTrack">
-                  <div className={`miniBarFill ${progress >= 70 ? 'barGreen' : progress >= 40 ? 'barOrange' : 'barRed'}`} style={{ width: `${progress}%` }} />
+                  <div className={`miniBarFill ${member.progress >= 70 ? 'barGreen' : member.progress >= 40 ? 'barOrange' : 'barRed'}`} style={{ width: `${member.progress}%` }} />
                 </div>
               </div>
             );
@@ -1549,15 +1732,14 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
     if (!showObjectiveModal) return null;
 
     const isProjectLeader = this.isProjectLeader;
-    const userDepartmentIds = context?.departmentRelations.map(r => r.department.Id) || [];
     
     const availableDepartments = isProjectLeader 
       ? allDepartments 
-      : allDepartments.filter(d => userDepartmentIds.indexOf(d.Id) >= 0);
+      : allDepartments.filter(d => this.managedDepartments.indexOf(d.Id) >= 0);
     
     const filteredDepts = selectedDepartments.length > 0 
       ? selectedDepartments.filter(id => availableDepartments.some(d => d.Id === id))
-      : userDepartmentIds;
+      : this.managedDepartments;
     
     const modalDeliverables = deliverables.filter(d => filteredDepts.indexOf(d.AssignedDepartmentId) >= 0);
     
@@ -1696,18 +1878,17 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
     if (!showTaskModal) return null;
 
     const isProjectLeader = this.isProjectLeader;
-    const userDepartmentIds = context?.departmentRelations.map(r => r.department.Id) || [];
     
     const availableDepartments = isProjectLeader 
       ? allDepartments 
-      : allDepartments.filter(d => userDepartmentIds.indexOf(d.Id) >= 0);
+      : allDepartments.filter(d => this.managedDepartments.indexOf(d.Id) >= 0);
     
     const filteredDepts = selectedDepartments.length > 0 
       ? selectedDepartments.filter(id => availableDepartments.some(d => d.Id === id))
-      : userDepartmentIds;
+      : this.managedDepartments;
     
     const modalDeliverables = deliverables.filter(d => filteredDepts.indexOf(d.AssignedDepartmentId) >= 0);
-    const modalObjectives = objectives.filter(o => !o.AssignedDepartmentId || filteredDepts.indexOf(o.AssignedDepartmentId) >= 0);
+    
     const modalDeptEmployees = departmentEmployees.filter(de => {
       const empDeptRelation = deptEmployeeRelations.find(r => r.EmployeeId === de.Id && filteredDepts.indexOf(r.DepartmentId) >= 0);
       return !!empDeptRelation;
@@ -1735,8 +1916,28 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
             </div>
             <div className="formGrid2">
               <div className="formField">
+                <label className="formLabel">Department *</label>
+                <select className="select" id="taskDepartment">
+                  <option value="">Select department...</option>
+                  {availableDepartments.map(dept => (
+                    <option key={dept.Id} value={dept.Id.toString()}>{dept.Title}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="formField">
+                <label className="formLabel">Cycle *</label>
+                <select className="select" id="taskCycle">
+                  <option value="">Select cycle...</option>
+                  {cycles.map(cycle => (
+                    <option key={cycle.Id} value={cycle.Id.toString()}>{cycle.Title} ({cycle.Status})</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="formGrid2">
+              <div className="formField">
                 <label className="formLabel">Parent Deliverable</label>
-                <select className="select" id="taskDeliverable">
+                <select className="select" id="taskDeliverable" onChange={this.handleTaskDeliverableChange}>
                   <option value="">-- None --</option>
                   {modalDeliverables.map(del => (
                     <option key={del.Id} value={del.Id.toString()}>{del.Title}</option>
@@ -1747,22 +1948,10 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
                 <label className="formLabel">Parent Objective</label>
                 <select className="select" id="taskObjective">
                   <option value="">-- None --</option>
-                  {modalObjectives.map(obj => (
-                    <option key={obj.Id} value={obj.Id.toString()}>{obj.Title}</option>
-                  ))}
                 </select>
               </div>
             </div>
             <div className="formGrid2">
-              <div className="formField">
-                <label className="formLabel">Cycle *</label>
-                <select className="select" id="taskCycle">
-                  <option value="">Select cycle...</option>
-                  {cycles.map(cycle => (
-                    <option key={cycle.Id} value={cycle.Id.toString()}>{cycle.Title} ({cycle.Status})</option>
-                  ))}
-                </select>
-              </div>
               <div className="formField">
                 <label className="formLabel">Priority</label>
                 <select className="select" id="taskPriority">
@@ -1772,8 +1961,6 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
                   <option value="Critical">Critical</option>
                 </select>
               </div>
-            </div>
-            <div className="formGrid2">
               <div className="formField">
                 <label className="formLabel">Source</label>
                 <select className="select" id="taskSource">
@@ -1830,10 +2017,20 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
   }
 
   public renderEmployeeModal(): React.ReactElement | null {
-    const { showEmployeeModal, selectedEmployee } = this.state;
+    const { showEmployeeModal, selectedEmployee, objectives, tasks, deliverables } = this.state;
     if (!showEmployeeModal || !selectedEmployee) return null;
 
-    const progress = 72;
+    const empId = selectedEmployee.employee.Id;
+    
+    const empObjectives = objectives.filter(o => o.AssignedEmployeeId === empId);
+    const empTasks = tasks.filter(t => t.AssignedEmployeeId === empId);
+    
+    const completedObj = empObjectives.filter(o => o.Status === 'Completed').length;
+    const completedTasks = empTasks.filter(t => t.Status === 'Completed').length;
+    
+    const totalItems = empObjectives.length + empTasks.length;
+    const completedItems = completedObj + completedTasks;
+    const progress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
 
     return (
       <div className="modalBackdrop" onClick={this.closeEmployeeModal}>
@@ -1841,22 +2038,22 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
           <div className="modalHeader">
             <div>
               <h2 className="modalTitle">{selectedEmployee.employee.Title}</h2>
-              <p className="modalSubtitle">{selectedEmployee.employee.PositionTitle}</p>
+              <p className="modalSubtitle">{selectedEmployee.employee.PositionTitle || 'N/A'}</p>
             </div>
             <button className="modalClose" onClick={this.closeEmployeeModal}>×</button>
           </div>
           <div className="detailGrid">
             <div className="detailBlock">
               <span className="detailLabel">Email</span>
-              <span className="detailValue">{selectedEmployee.employee.EmployeeEmail}</span>
+              <span className="detailValue">{selectedEmployee.employee.EmployeeEmail || 'N/A'}</span>
             </div>
             <div className="detailBlock">
               <span className="detailLabel">Department</span>
-              <span className="detailValue">{selectedEmployee.departmentRelation.department.Title}</span>
+              <span className="detailValue">{selectedEmployee.departmentRelation?.department?.Title || 'N/A'}</span>
             </div>
             <div className="detailBlock">
               <span className="detailLabel">Role in Dept.</span>
-              <span className="detailValue">{selectedEmployee.departmentRelation.employeeDepartment.RoleInDepartment}</span>
+              <span className="detailValue">{selectedEmployee.departmentRelation?.employeeDepartment?.RoleInDepartment || 'Member'}</span>
             </div>
             <div className="detailBlock">
               <span className="detailLabel">Subordinates</span>
@@ -1865,41 +2062,180 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
           </div>
           <div className="divider" />
           <div className="panelHeader">
-            <h3>Task Progress</h3>
+            <h3>Performance Progress</h3>
             <span className="badge badgeOk">{progress}% Completed</span>
           </div>
           <div className="barsList">
             <div className="barRow">
               <div className="barHeaderRow">
                 <span>Objectives</span>
-                <b>3/5</b>
+                <b>{completedObj}/{empObjectives.length}</b>
               </div>
               <div className="barTrack">
-                <div className="barFill barBlue" style={{ width: '60%' }} />
+                <div className="barFill barBlue" style={{ width: `${empObjectives.length > 0 ? (completedObj / empObjectives.length) * 100 : 0}%` }} />
               </div>
             </div>
             <div className="barRow">
               <div className="barHeaderRow">
                 <span>Tasks</span>
-                <b>8/12</b>
+                <b>{completedTasks}/{empTasks.length}</b>
               </div>
               <div className="barTrack">
-                <div className="barFill barGreen" style={{ width: '67%' }} />
-              </div>
-            </div>
-            <div className="barRow">
-              <div className="barHeaderRow">
-                <span>Deliverables</span>
-                <b>2/4</b>
-              </div>
-              <div className="barTrack">
-                <div className="barFill barOrange" style={{ width: '50%' }} />
+                <div className="barFill barGreen" style={{ width: `${empTasks.length > 0 ? (completedTasks / empTasks.length) * 100 : 0}%` }} />
               </div>
             </div>
           </div>
           <div className="modalActions">
             <button className="secondaryBtn" onClick={this.closeEmployeeModal}>Close</button>
-            <button className="primaryBtn">View Full Details</button>
+            <button className="primaryBtn" onClick={this.openEmployeeDetailModal}>View Full Details</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  public renderEmployeeDetailModal(): React.ReactElement | null {
+    const { showEmployeeDetailModal, selectedEmployee, activeDetailTab, objectives, tasks, cycles, context } = this.state;
+    if (!showEmployeeDetailModal || !selectedEmployee) return null;
+
+    const emp = selectedEmployee.employee;
+    const empObjectives = objectives.filter(o => o.AssignedEmployeeId === emp.Id);
+    const empTasks = tasks.filter(t => t.AssignedEmployeeId === emp.Id);
+
+    const completedObj = empObjectives.filter(o => o.Status === 'Completed').length;
+    const completedTasks = empTasks.filter(t => t.Status === 'Completed').length;
+
+    return (
+      <div className="modalBackdrop" onClick={this.closeEmployeeDetailModal}>
+        <div className="modalPanel modalLarge" onClick={(e) => e.stopPropagation()}>
+          <div className="modalHeader">
+            <div>
+              <h2 className="modalTitle">{emp.Title}</h2>
+              <p className="modalSubtitle">{emp.PositionTitle || 'N/A'}</p>
+            </div>
+            <button className="modalClose" onClick={this.closeEmployeeDetailModal}>×</button>
+          </div>
+          
+          <div className="tabBar">
+            <button 
+              className={`tabBtn ${activeDetailTab === 'overview' ? 'tabActive' : ''}`}
+              onClick={() => this.setEmployeeDetailTab('overview')}
+            >
+              Overview
+            </button>
+            <button 
+              className={`tabBtn ${activeDetailTab === 'objectives' ? 'tabActive' : ''}`}
+              onClick={() => this.setEmployeeDetailTab('objectives')}
+            >
+              Objectives ({empObjectives.length})
+            </button>
+            <button 
+              className={`tabBtn ${activeDetailTab === 'tasks' ? 'tabActive' : ''}`}
+              onClick={() => this.setEmployeeDetailTab('tasks')}
+            >
+              Tasks ({empTasks.length})
+            </button>
+          </div>
+
+          <div className="tabContent">
+            {activeDetailTab === 'overview' && (
+              <div className="detailSection">
+                <div className="detailGrid">
+                  <div className="detailBlock">
+                    <span className="detailLabel">Email</span>
+                    <span className="detailValue">{emp.EmployeeEmail || 'N/A'}</span>
+                  </div>
+                  <div className="detailBlock">
+                    <span className="detailLabel">Department</span>
+                    <span className="detailValue">{selectedEmployee.departmentRelation?.department?.Title || 'N/A'}</span>
+                  </div>
+                  <div className="detailBlock">
+                    <span className="detailLabel">Role in Dept.</span>
+                    <span className="detailValue">{selectedEmployee.departmentRelation?.employeeDepartment?.RoleInDepartment || 'Member'}</span>
+                  </div>
+                  <div className="detailBlock">
+                    <span className="detailLabel">Subordinates</span>
+                    <span className="detailValue">{selectedEmployee.subordinatesCount}</span>
+                  </div>
+                </div>
+                
+                <h4 style={{ marginTop: '20px', marginBottom: '10px' }}>Performance Summary</h4>
+                <div className="kpiGrid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                  <div className="kpiCard">
+                    <div className="kpiValue">{empObjectives.length}</div>
+                    <div className="kpiLabel">Objectives</div>
+                  </div>
+                  <div className="kpiCard">
+                    <div className="kpiValue">{empTasks.length}</div>
+                    <div className="kpiLabel">Tasks</div>
+                  </div>
+                  <div className="kpiCard">
+                    <div className="kpiValue">{completedObj}</div>
+                    <div className="kpiLabel">Obj. Completed</div>
+                  </div>
+                  <div className="kpiCard">
+                    <div className="kpiValue">{completedTasks}</div>
+                    <div className="kpiLabel">Tasks Completed</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeDetailTab === 'objectives' && (
+              <div className="detailSection">
+                {empObjectives.length === 0 ? (
+                  <div className="emptyState">No objectives assigned</div>
+                ) : (
+                  <div className="listItems">
+                    {empObjectives.map(obj => (
+                      <div key={obj.Id} className="listItem" onClick={() => this.openObjectiveDetailModal(obj)}>
+                        <div className="listItemMain">
+                          <span className="listItemTitle">{obj.Title}</span>
+                          <span className={`badge ${obj.Status === 'Completed' ? 'badgeOk' : obj.Status === 'In Progress' ? 'badgeWarn' : 'badgeNeutral'}`}>
+                            {obj.Status}
+                          </span>
+                        </div>
+                        <div className="listItemMeta">
+                          <span>Priority: {obj.Priority}</span>
+                          <span>Category: {obj.Category}</span>
+                          {obj.DueDate && <span>Due: {new Date(obj.DueDate).toLocaleDateString()}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeDetailTab === 'tasks' && (
+              <div className="detailSection">
+                {empTasks.length === 0 ? (
+                  <div className="emptyState">No tasks assigned</div>
+                ) : (
+                  <div className="listItems">
+                    {empTasks.map(task => (
+                      <div key={task.Id} className="listItem">
+                        <div className="listItemMain">
+                          <span className="listItemTitle">{task.Title}</span>
+                          <span className={`badge ${task.Status === 'Completed' ? 'badgeOk' : task.Status === 'In Progress' ? 'badgeWarn' : 'badgeNeutral'}`}>
+                            {task.Status}
+                          </span>
+                        </div>
+                        <div className="listItemMeta">
+                          <span>Priority: {task.Priority}</span>
+                          <span>Type: {task.TaskType}</span>
+                          {task.DueDate && <span>Due: {new Date(task.DueDate).toLocaleDateString()}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="modalActions">
+            <button className="secondaryBtn" onClick={this.closeEmployeeDetailModal}>Close</button>
           </div>
         </div>
       </div>
@@ -2409,6 +2745,7 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
 
   private handleSaveTask = async (): Promise<void> => {
     const title = (document.getElementById('taskTitle') as HTMLInputElement).value;
+    const departmentIdStr = (document.getElementById('taskDepartment') as HTMLSelectElement).value;
     const deliverableIdStr = (document.getElementById('taskDeliverable') as HTMLSelectElement).value;
     const objectiveIdStr = (document.getElementById('taskObjective') as HTMLSelectElement).value;
     const cycleId = parseInt((document.getElementById('taskCycle') as HTMLSelectElement).value);
@@ -2419,7 +2756,7 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
     const description = (document.getElementById('taskDescription') as HTMLTextAreaElement).value;
     const assignedEmpIdStr = (document.getElementById('taskEmployee') as HTMLSelectElement).value;
 
-    if (!title || !cycleId || !dueDate) {
+    if (!title || !departmentIdStr || !cycleId || !dueDate) {
       alert('Please complete all required fields');
       return;
     }
@@ -2431,6 +2768,7 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
         await this.performanceService.createTask({
           TaskCode: this.generateCode('TASK'),
           Title: title,
+          AssignedDepartmentId: parseInt(departmentIdStr),
           DeliverableId: deliverableIdStr ? parseInt(deliverableIdStr) : undefined,
           ObjectiveId: objectiveIdStr ? parseInt(objectiveIdStr) : undefined,
           CycleId: cycleId,
@@ -2795,15 +3133,14 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
   }
 
   public renderDeliverableModal(): React.ReactElement | null {
-    const { showDeliverableModal, cycles, context, allDepartments } = this.state;
+    const { showDeliverableModal, cycles, allDepartments } = this.state;
     if (!showDeliverableModal) return null;
 
     const isProjectLeader = this.isProjectLeader;
-    const userDepartmentIds = context?.departmentRelations.map(r => r.department.Id) || [];
     
     const availableDepartments = isProjectLeader 
       ? allDepartments 
-      : allDepartments.filter(d => userDepartmentIds.indexOf(d.Id) >= 0);
+      : allDepartments.filter(d => this.managedDepartments.indexOf(d.Id) >= 0);
 
     return (
       <div className="modalBackdrop" onClick={this.closeDeliverableModal}>
@@ -3298,6 +3635,7 @@ export class EmployeeDashboard extends React.Component<IEmployeeDashboardProps, 
         {this.renderObjectiveModal()}
         {this.renderTaskModal()}
         {this.renderEmployeeModal()}
+        {this.renderEmployeeDetailModal()}
         {this.renderCycleListModal()}
         {this.renderCycleModal()}
         {this.renderDeliverableDetailModal()}

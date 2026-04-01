@@ -119,6 +119,8 @@ export class PerformanceService {
   private async createItem(listName: string, data: any): Promise<number | null> {
     const url = this.getApiUrl(listName);
 
+    console.log('Creating item in', listName, 'with data:', JSON.stringify(data, null, 2));
+
     const response: SPHttpClientResponse = await this.spHttpClient.post(
       url,
       SPHttpClient.configurations.v1,
@@ -144,11 +146,29 @@ export class PerformanceService {
   private async updateItem(listName: string, id: number, data: any): Promise<boolean> {
     const url = this.getApiUrl(listName) + `(${id})`;
 
+    const cleanData: any = {};
+    for (const key of Object.keys(data)) {
+      const value = data[key];
+      if (value === 'True' || value === 'False') {
+        cleanData[key] = value === 'True';
+      } else if (value === 'Yes' || value === 'No') {
+        cleanData[key] = value === 'Yes';
+      } else if (typeof value === 'string' && (value.startsWith('{') || value.startsWith('['))) {
+        try {
+          cleanData[key] = JSON.parse(value);
+        } catch {
+          cleanData[key] = value;
+        }
+      } else {
+        cleanData[key] = value;
+      }
+    }
+
     const response: SPHttpClientResponse = await this.spHttpClient.post(
       url,
       SPHttpClient.configurations.v1,
       {
-        body: JSON.stringify(data),
+        body: JSON.stringify(cleanData),
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -264,14 +284,14 @@ export class PerformanceService {
 
   public async createDeliverable(data: Partial<IDeliverable>): Promise<number | null> {
     const toBool = (val: any): boolean => val === true || val === 1 || val === '1' || val === 'Yes' || val === 'True';
-    const toYesNo = (val: any): string => toBool(val) ? 'True' : 'False';
+    const toYesNo = (val: any): string => toBool(val) ? 'Yes' : 'No';
 
     const deliverableData: any = {
       Title: data.Title,
       AssignedDepartmentId: data.AssignedDepartmentId,
       AssignedByEmployeeId: data.AssignedByEmployeeId,
       DepartmentManagerEmployeeId: data.DepartmentManagerEmployeeId,
-      CycleId: data.CycleId,
+      Cycles: data.CycleId ? data.CycleId.toString() : undefined,
       Category: data.Category || 'Project Deliverable',
       Priority: data.Priority || 'Medium',
       Status: data.Status || 'Not Started',
@@ -293,7 +313,7 @@ export class PerformanceService {
 
   public async updateDeliverable(id: number, data: Partial<IDeliverable>): Promise<boolean> {
     const toBool = (val: any): boolean => val === true || val === 1 || val === '1' || val === 'Yes' || val === 'True';
-    const toYesNo = (val: any): string => toBool(val) ? 'True' : 'False';
+    const toYesNo = (val: any): string => toBool(val) ? 'Yes' : 'No';
     const updateData: any = {};
 
     if (data.Title !== undefined) updateData.Title = data.Title;
@@ -426,11 +446,11 @@ export class PerformanceService {
 
   public async createObjective(data: Partial<IObjective>): Promise<number | null> {
     const toBool = (val: any): boolean => val === true || val === 1 || val === '1' || val === 'Yes' || val === 'True';
-    const toYesNo = (val: any): string => toBool(val) ? 'True' : 'False';
+    const toYesNo = (val: any): string => toBool(val) ? 'Yes' : 'No';
 
     const objectiveData: any = {
       Title: data.Title,
-      CycleId: data.CycleId,
+      Cycles: data.CycleId ? data.CycleId.toString() : undefined,
       ObjectiveSource: data.ObjectiveSource || 'Standalone',
       ObjectiveType: data.ObjectiveType || 'Individual',
       Category: data.Category || 'Performance',
@@ -464,7 +484,7 @@ export class PerformanceService {
 
   public async updateObjective(id: number, data: Partial<IObjective>): Promise<boolean> {
     const toBool = (val: any): boolean => val === true || val === 1 || val === '1' || val === 'Yes' || val === 'True';
-    const toYesNo = (val: any): string => toBool(val) ? 'True' : 'False';
+    const toYesNo = (val: any): string => toBool(val) ? 'Yes' : 'No';
     const updateData: any = {};
 
     if (data.Title !== undefined) updateData.Title = data.Title;
@@ -613,27 +633,24 @@ export class PerformanceService {
   }
 
   public async createTask(data: Partial<ITask>): Promise<number | null> {
-    const toBool = (val: any): boolean => val === true || val === 1 || val === '1' || val === 'Yes' || val === 'True';
-    const toYesNo = (val: any): string => toBool(val) ? 'True' : 'False';
-
     const taskData: any = {
       Title: data.Title,
-      CycleId: data.CycleId,
       TaskSource: data.TaskSource || 'Standalone',
       TaskType: data.TaskType || 'Operational',
       Priority: data.Priority || 'Medium',
       Status: data.Status || 'Pending',
       DueDate: data.DueDate,
       ProgressPercent: data.ProgressPercent || 0,
-      RequiresApproval: toYesNo(data.RequiresApproval),
+      RequiresApproval: Boolean(data.RequiresApproval),
       ApprovalStatus: data.ApprovalStatus || 'Not Required',
-      IsDepartmentTask: toYesNo(data.IsDepartmentTask),
-      IsLinkedToDeliverable: toYesNo(data.IsLinkedToDeliverable),
-      IsLinkedToObjective: toYesNo(data.IsLinkedToObjective),
-      IsOverdue: 'False',
+      IsDepartmentTask: Boolean(data.IsDepartmentTask),
+      IsLinkedToDeliverable: Boolean(data.IsLinkedToDeliverable),
+      IsLinkedToObjective: Boolean(data.IsLinkedToObjective),
+      IsOverdue: Boolean(data.IsOverdue),
       IsActive: 'True'
     };
 
+    if (data.CycleId) taskData.CycleId = data.CycleId;
     if (data.TaskCode) taskData.TaskCode = data.TaskCode;
     if (data.DeliverableId) taskData.DeliverableId = data.DeliverableId;
     if (data.ObjectiveId) taskData.ObjectiveId = data.ObjectiveId;
@@ -649,7 +666,10 @@ export class PerformanceService {
     if (data.ExpectedResult) taskData.ExpectedResult = data.ExpectedResult;
     if (data.Comments) taskData.Comments = data.Comments;
     if (data.EvidenceLink) taskData.EvidenceLink = data.EvidenceLink;
+    if (data.ApprovedByEmployeeId) taskData.ApprovedByEmployeeId = data.ApprovedByEmployeeId;
+    if (data.ApprovalDate) taskData.ApprovalDate = data.ApprovalDate;
 
+    console.log('Task data to create:', JSON.stringify(taskData, null, 2));
     return this.createItem(this.listNames.tasks, taskData);
   }
 
@@ -660,6 +680,7 @@ export class PerformanceService {
 
     if (data.Title !== undefined) updateData.Title = data.Title;
     if (data.TaskCode !== undefined) updateData.TaskCode = data.TaskCode;
+    if (data.CycleId !== undefined) updateData.CycleId = data.CycleId;
     if (data.DeliverableId !== undefined) updateData.DeliverableId = data.DeliverableId;
     if (data.ObjectiveId !== undefined) updateData.ObjectiveId = data.ObjectiveId;
     if (data.ParentTaskId !== undefined) updateData.ParentTaskId = data.ParentTaskId;
@@ -688,7 +709,7 @@ export class PerformanceService {
     if (data.IsLinkedToDeliverable !== undefined) updateData.IsLinkedToDeliverable = toYesNo(data.IsLinkedToDeliverable);
     if (data.IsLinkedToObjective !== undefined) updateData.IsLinkedToObjective = toYesNo(data.IsLinkedToObjective);
     if (data.IsOverdue !== undefined) updateData.IsOverdue = toYesNo(data.IsOverdue);
-    if (data.IsActive !== undefined) updateData.IsActive = toYesNo(data.IsActive);
+    if (data.IsActive !== undefined) updateData.IsActive = data.IsActive ? 'True' : 'False';
 
     return this.updateItem(this.listNames.tasks, id, updateData);
   }
